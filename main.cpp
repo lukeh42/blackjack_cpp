@@ -5,8 +5,30 @@
 #include <algorithm> //for shuffle
 #include <random>//for MT
 
-//ENUMS
-enum class CardRanks{
+namespace Random{
+    std::mt19937 seed{ static_cast<std::mt19937::result_type>(std::time(nullptr)) };
+    //only seed RNG once, keep accessing Random::seed
+}
+namespace Constants{
+    namespace Dealer{
+        const int stand {17}; //dealer must hit 17 or higher
+    }
+    namespace BetReturns{
+        double loss{-1};//lose bet
+        double tie{0}; //get bet back
+        double blackjack {1.5};
+        double win{2};//get bet back, then winnings of bet
+    }
+}
+
+class Card
+{
+private:
+    int m_value {};
+    int m_suit {};
+public:
+enum Face{
+    ace,
     two,
     three,
     four,
@@ -18,321 +40,289 @@ enum class CardRanks{
     ten,
     jack,
     queen,
-    king,
-    ace,
+    king
 };
 
-enum class CardSuits{
-    spade,
-    club,
-    diamond,
-    heart,
+enum Suit{
+    spades,
+    clubs,
+    hearts,
+    diamonds
 };
+    Card(Face value=ace, Suit suit=spades)//constructor, by default ace of spades is created
+    : m_value {value} , m_suit {suit}
+    {};
 
-// STRUCTURES
-struct Card{
-    CardSuits suit;
-    CardRanks face;
-};
-
-struct Hand{ //used for storing player data.
-    int score{0}; //card score
-    int aces{0}; //how many aces player has. Used to implement the 1 or 11 ace rule.
-};
-
-//NAMESPACES
-namespace RandomSeed{
-    std::mt19937 seed{ static_cast<std::mt19937::result_type>(std::time(nullptr)) };//only seed RNG once
-}
-
-namespace DealerConst{
-    const int stand {17}; //edit to change what value the dealer must stand to.
-}
-
-namespace RateReturns{//edit to change multiplier on bets.
-    double loss {-1}; //default -1: lose betted money
-    double tie {0};//default 0: return betted money
-    double blackjack {1.5}; //default 1.5: return money + half
-    double win {2}; //default 2: return money + bet from dealer
-}
-
-//DECK / INDIVIDUAL CARD FUNCTIONS
-void printCard(const Card& input){
-    /*Uses 2 switches to print card face and suit.*/
-    switch(input.face){
-    case CardRanks::two:std::cout << "2"; break;
-    case CardRanks::three: std::cout << "3"; break;
-    case CardRanks::four: std::cout << "4"; break;
-    case CardRanks::five: std::cout << "5"; break;
-    case CardRanks::six: std::cout << "6"; break;
-    case CardRanks::seven: std::cout << "7"; break;
-    case CardRanks::eight: std::cout << "8"; break;
-    case CardRanks::nine: std::cout << "9"; break;
-    case CardRanks::ten: std::cout << "10"; break;
-    case CardRanks::jack: std::cout << "J"; break;
-    case CardRanks::queen: std::cout << "Q"; break;
-    case CardRanks::king: std::cout << "K"; break;
-    case CardRanks::ace: std::cout << "A"; break;
-    default: std::cout << "X!"; break;
-    }
-
-    switch(input.suit){
-    case CardSuits::club: std::cout << "C"; break;
-    case CardSuits::diamond: std::cout << "D"; break;
-    case CardSuits::heart: std::cout << "H"; break;
-    case CardSuits::spade: std::cout << "S"; break;
-    default: std::cout << "X!"; break;
-    }
-}
-
-std::array<Card, 52> createDeck(){
-    /*Creates deck in order of SPADE, CLUB, DIAMOND, HEART. Rising from 2 to ace.*/
-    std::array<Card, 52> deck{};
-    std::array<Card, 52>::size_type index{0};
-    for(int suit=0; suit<=static_cast<int>(CardSuits::heart); ++suit){
-        for(int crank=0; crank<=static_cast<int>(CardRanks::ace); ++crank){
-            deck[index].suit = static_cast<CardSuits>(suit);
-            deck[index].face = static_cast<CardRanks>(crank);
-            ++index;
+    char readSuit(){
+        switch(m_suit){
+        case spades: return 'S'; break;
+        case clubs: return 'C'; break;
+        case hearts: return 'H'; break;
+        case diamonds: return 'D'; break;
+        default: return 'X'; break;
         }
-
+        return 'X';
     }
+    char readValue(){
+        switch(m_value){
+        case ace: return 'A'; break;
+        case two: return '2'; break;
+        case three: return '3'; break;
+        case four: return '4'; break;
+        case five: return '5'; break;
+        case six: return '6'; break;
+        case seven: return '7'; break;
+        case eight: return '8'; break;
+        case nine: return '9'; break;
+        case ten: return 'T'; break;
+        case jack: return 'J'; break;
+        case queen: return 'Q'; break;
+        case king: return 'K'; break;
+        default: return 'X'; break;
+        }
+        return 'X';
+    }
+
+    int returnValue(){
+        switch(m_value){
+        case ace: return 11; break;//1 case is handled by Hand class
+        case two: return 2; break;
+        case three: return 3; break;
+        case four: return 4; break;
+        case five: return 5; break;
+        case six: return 6; break;
+        case seven: return 7; break;
+        case eight: return 8; break;
+        case nine: return 9; break;
+        case ten: return 10; break;
+        case jack: return 10; break;
+        case queen: return 10; break;
+        case king: return 10; break;
+        default: return 0; break;
+        }
+        return 0;
+    }
+    void setCard(int face, int suit){
+        m_value = face;
+        m_suit = suit;
+    }
+
+    friend std::ostream& operator<< (std::ostream& out, Card& card);
+
+};
+
+
+// overload << operator to make outputting a card natural and trivial
+std::ostream& operator<< (std::ostream& out, Card& card){
+    out << card.readValue() << card.readSuit();
+    return out;
+}
+
+class Hand{
+private:
+    int m_value{};
+    int m_aces{};
+public:
+    Hand(int value=0, int aces=0): m_value {value}, m_aces {aces}{};//constructor, default init 0 on both
+
+    int getValue(){
+        return m_value;
+    }
+    int getAces(){
+        return m_aces;
+    }
+
+    void addCard(Card& card){
+        m_value += card.returnValue();
+
+        if(card.readValue() == 'A'){
+        m_aces += 1;//add 1 if card is an ace
+        }
+    }
+
+    void aceHandler(){/// needs to run iff m_value > 21 && m_aces > 0
+        //no if statement here. Game handler will check for >21 (has to always be done)
+        //then if >21, can then do the ace check, which then calls this.
+        //this minimises the number of if statement checks that need to be made
+        //if this had the checks its redundant and slow or it needs to be run every
+        //time a card is handled - slow!
+        m_aces -= 1;
+        m_value -= 10;
+    }
+
+};
+
+using Deck = std::array<Card, 52>;
+using DeckIndex = Deck::size_type;
+
+Deck createDeck(){
+    Deck deck{};
+    DeckIndex  index{0};
+    //could use enum types and overload ++ to avoid static_casts but this is less code
+    for(int suit=0; suit<=static_cast<int>(Card::diamonds); ++suit){
+        for(int face=0; face<=static_cast<int>(Card::king); ++face){
+            deck[index++].setCard(face, suit);
+        }//end face loop
+    }//end suit loop
     return deck;
 }
 
-std::array<Card, 52> shuffleDeck(std::array<Card, 52>& deck){
+Deck shuffleDeck(Deck& deck){
     /*Shuffles deck. Uses RandomSeed to avoid seeding MT multiple times*/
-    std::shuffle(deck.begin(), deck.end(), RandomSeed::seed);
+    std::shuffle(deck.begin(), deck.end(), Random::seed);
 
     return deck;
 }
-
-void printDeck(std::array<Card, 52>& deck){
-    /*prints entire deck by looping printCard()*/
-    for(int i=0; i<52; ++i){
-        printCard(deck[static_cast<std::array<Card, 52>::size_type>(i)]);
-        std::cout << "\n";
-    }
+void printDeal(std::string person, Card& card){
+    std::cout << person << " has been dealt a " << card << "\n";
 }
 
-//Blackjack functions
-void addScore(Hand& user, Card& drawnCard){
-    /*Adds card scores to the Hand struct. Works for both player and dealer. Aces add 1 to ace Hand component*/
-    switch(drawnCard.face){
-        case CardRanks::two:
-            user.score +=2;
-            break;
-        case CardRanks::three:
-            user.score +=3;
-            break;
-        case CardRanks::four:
-            user.score +=4;
-            break;
-        case CardRanks::five:
-            user.score +=5;
-            break;
-        case CardRanks::six:
-            user.score +=6;
-            break;
-        case CardRanks::seven:
-            user.score +=7;
-            break;
-        case CardRanks::eight:
-            user.score +=8;
-            break;
-        case CardRanks::nine:
-            user.score +=9;
-            break;
-        case CardRanks::ten:
-            user.score +=10;
-            break;
-        case CardRanks::jack:
-            user.score +=10;
-            break;
-        case CardRanks::queen:
-            user.score +=10;
-            break;
-        case CardRanks::king:
-            user.score +=10;
-            break;
-        case CardRanks::ace:
-            user.score +=11;
-            user.aces +=1;
-            break;
-        default:
-            user.score +=0;
-            break;
-    }
+void printScore(std::string person, Hand& hand){
+    std::cout << person <<" has a value of " << hand.getValue() << ".\n";
 }
 
-void aceHandler(Hand& user, bool isDealer){
-    /*Handles aces and them having values of 1 or 11. Bool is for correct std::cout names*/
-    if(user.aces > 0 && user.score > 21){
-        --user.aces;
-        user.score -=10;
-        if(isDealer){
-            std::cout << "Dealer is now using an ace value of 1.\n";
-            std::cout << "Dealer has " << user.score << ".\n";
+bool bustChecker(std::string userName, Hand& user){
+    if(user.getValue() > 21){
+        if(user.getAces() > 0){//has to be nested. >21 && aces=0 wouldn't trigger bust if ace=0
+                user.aceHandler();
+                std::cout << userName << " has used an ace!\n";
+                printScore(userName, user);
         }
         else{
-            std::cout << "Player is now using an ace value of 1.\n";
-            std::cout << "Player has " << user.score << ".\n";
+                std::cout << userName << " has gone bust!\n";//if no aces, then dealer must be bust
+                return true;
         }
     }
+    return false;
 }
 
-void hitOrStick(Hand& player, std::array<Card, 52>& deck, std::array<Card, 52>::size_type& index){
-    /*Player decision function. */
+bool dealerDecision(Deck& deck, Hand& dealer, DeckIndex& index){
+    dealer.addCard(deck[index]);//dealer must always be dealt another card
+    printDeal("Dealer", deck[index++]);
+
+    bool bust{false};
+
+    while(dealer.getValue() < Constants::Dealer::stand){//keep dealing cards if < stand const
+        dealer.addCard(deck[index]);
+        printDeal("Dealer", deck[index++]);
+        bust = bustChecker("Dealer", dealer);
+    }
+    return bust;
+}
+
+bool playerDecision(Deck& deck, Hand& player, DeckIndex& index){
+    bool bust{bustChecker("Player", player)};//run bust check in case of rare AA hand
+
     std::string choice{"hit"};
-
-    aceHandler(player, false);//isDealer=false
-    //implement aceHandler before while loop to prevent case of Ace-ace hand (22) causing a bust even
-    //though it should be 12. If not here, while loop will not run meaning that acehandler wont be run.
-    //same idea for dealerHit() function
-
-    while(player.score < 21 && choice == "hit"){
-        std::cout << "Enter 'hit' to hit, or enter 'stick' to stick.\n";
+    while((!bust) && (choice == "hit")){
+        std::cout << "Enter 'hit' or 'stick' to decide what to do.\n";
         std::cin >> choice;
+
         if(choice=="hit"){
-            addScore(player, deck[index++]);
-            std::cout << "Player has been dealt a ";
-            printCard(deck[index-1]);
-            std::cout << ".\nPlayer has " << player.score << ".\n";
-        }
-        aceHandler(player, false);//isDealer=false
-    }
-}
-
-void dealerHit(Hand& user, std::array<Card, 52>& deck, std::array<Card, 52>::size_type& index){
-    /*Function for dealer decision. Separate function as dealer's decisions are algorithmic*/
-    aceHandler(user, true);//isDealer=true
-
-    while(user.score < DealerConst::stand){
-        addScore(user, deck[index++]);
-        std::cout << "Dealer has been dealt a ";
-        printCard(deck[index-1]);
-        std::cout << ".\nDealer has " << user.score << ".\n";
-        aceHandler(user, true);//isDealer=true
-    }
-}
-
-double showdown(Hand& player, Hand& dealer, bool blackjack){
-    /*function for deciding winner and returning a rate to apply to bet.*/
-    if(player.score < dealer.score){
-        std::cout << "Player has " << player.score << " while Dealer has " << dealer.score << ".\n";
-        std::cout << "Dealer wins!";
-        return RateReturns::loss;
-    }
-    else if(player.score == dealer.score){
-        std::cout << "Player has " << player.score << " while Dealer has " << dealer.score << ".\n";
-        std::cout << "Nobody wins but nobody loses!\n";
-        return RateReturns::tie;
-    }
-    else{
-        std::cout << "Dealer has " << dealer.score << " while Player has " << player.score << ".\n";
-        std::cout << "Player wins!";
-        if(blackjack){
-            return RateReturns::blackjack;
-        }
-        else{
-            return RateReturns::win;
+            player.addCard(deck[index]);
+            printDeal("Player", deck[index++]);
+            printScore("Player", player);
+            bust = bustChecker("Player", player);
         }
     }
+    return bust;
 }
 
-double playBlackjack(std::array<Card, 52>& deck){
-    /*Function that handles game of blackjack. Returns rate of return on bet.*/
-    std::array<Card, 52>::size_type deckIndex{0};
+double playBlackjack(){
+    Deck deck{createDeck()};
+    deck = shuffleDeck(deck);
+    DeckIndex index{0};
+    //deck is now ready for play
+
+    //uncomment this block and adjust deck for testing purposes
+    //deck[0].setCard(Card::queen, Card::diamonds);
+    //deck[1].setCard(Card::ace, Card::spades);
+    //deck[2].setCard(Card::ace, Card::diamonds);
+    //deck[3].setCard(Card::ace, Card::hearts);
+
+    //create dealer and player hands
     Hand dealer{};
     Hand player{};
-    bool blackjack{false};
-    double rate{};
 
-    //deal dealer's first card. Dealer's second card is face down in blackjack. So can be dealt later here.
-    addScore(dealer, deck[deckIndex]);
-    std::cout << "Dealer has been dealt ";
-    printCard(deck[deckIndex++]);//++ here as avoids needing to -1 it if ++ was on addScore
-    std::cout << ".\nDealer has " << dealer.score << ".\n";
 
-    //deal player's hand
-    addScore(player, deck[deckIndex]);
-    std::cout << "Player has been dealt ";
-    printCard(deck[deckIndex++]);
+    dealer.addCard(deck[index]);//deal dealer's first card.
+    printDeal("Dealer", deck[index++]);
 
-    addScore(player, deck[deckIndex]);
-    std::cout << ".\nPlayer has been dealt ";
-    printCard(deck[deckIndex++]);
-    std::cout << ".\nPlayer has " << player.score << ".\n";
+    player.addCard(deck[index]);//deal both player's cards
+    printDeal("Player", deck[index++]);
+    player.addCard(deck[index]);
+    printDeal("Player", deck[index++]);
 
-    if(player.score == 21){
+    printScore("Dealer", dealer);
+    printScore("Player", player);
+
+    //blackjack path
+    if(player.getValue() == 21){
         std::cout << "Player has hit a blackjack!\n";
-        dealerHit(dealer, deck, deckIndex);
-        blackjack = true;
-        std::cout << "Player has " << player.score << " while Dealer has " << dealer.score << ".\n";
-        if(player.score == dealer.score){//works as player.score is 21 in this case
-            std::cout << "You hit a blackjack but the dealer hit 21. Unlucky!\n";
-            return RateReturns::tie;
+        dealerDecision(deck, dealer, index);
+        if(dealer.getValue() == 21){
+            std::cout << "Unlucky! Dealer also has 21!\n" << "Nobody wins!\n";
+            return Constants::BetReturns::tie;
         }
         else{
-            return RateReturns::blackjack;
+            std::cout << "Player wins!\n";
+            return Constants::BetReturns::blackjack;
         }
+
     }
 
-    hitOrStick(player, deck, deckIndex); //start player decisions
-    if(player.score > 21){
-        std::cout << "Player has gone BUST!\n";
-        std::cout << "Dealer wins!";
-        return RateReturns::loss;
+    //player choice path
+    bool playerBust{false};
+    bool dealerBust{false};
+    playerBust = playerDecision(deck, player, index);
+    if(playerBust){
+        std::cout << "Player loses!\n";
+        return Constants::BetReturns::loss;
     }
     else{
-        dealerHit(dealer, deck, deckIndex);
-        if(dealer.score > 21){
-            std::cout << "Dealer has gone BUST!\n";
-            std::cout << "Player wins!";
-            return RateReturns::win;
+        dealerBust = dealerDecision(deck, dealer, index);
+        if(dealerBust){
+            std::cout << "Player wins!\n";
+            return Constants::BetReturns::win;
         }
-        else{
-            rate = showdown(player, dealer, blackjack);
-            return rate;
+        if(player.getValue() < dealer.getValue()){
+            std::cout << "Player had " << player.getValue() << " while Dealer had " << dealer.getValue() << "\n";
+            std::cout << "Player loses!\n";
+            return Constants::BetReturns::loss;
+        }
+        else if(player.getValue() == dealer.getValue()){
+            std::cout << "It's a draw!\n";
+            return Constants::BetReturns::tie;
+        }
+        else{//if here, player must have won
+            std::cout << "Player had " << player.getValue() << " while Dealer had " << dealer.getValue() << "\n";
+            std::cout << "Player wins!\n";
+        return Constants::BetReturns::win;
         }
     }
+    return 0;
 }
 
-//MAIN
+
+
 int main()
 {
-    std::array<Card, 52> deck{};
-    deck = createDeck();
-
-    std::string choice{"play"};
+    std::cout << "Welcome to the C++ Casino\n";
+    std::string enter{"play"};
     double playerMoney{0};
-    double winningRate{};
 
-    while(choice == "play"){
-        std::cout << "BLACKJACK\nbut it's in C++\n";
 
-        double bet{};
-        std::cout << "Please enter how much money you would like to bet on this hand: ";
+    while(enter=="play"){
+        double bet{0};
+        std::cout << "Enter how much you want to bet on this hand: ";
         std::cin >> bet;
-        deck = shuffleDeck(deck); //shuffle every game of blackjack
-
-        winningRate = playBlackjack(deck);
-        playerMoney += bet*winningRate;
-        std::cout << "\nYou now have: " << playerMoney << "\n";
-        std::cout <<"\nTo play again, enter 'play', to quit, enter anything else: ";
-        std::cin >> choice;
+        double returnMultiplier{playBlackjack()};
+        playerMoney += returnMultiplier*bet;
+        std::cout << "You currently have " << playerMoney << "\n";
+        std::cout << "Enter 'play' to play again, enter anything else to quit: ";
+        std::cin >> enter;
         std::cout << "\n";
     }
-
-    std::cout << "Thanks for playing at the C++ casino!\n";
-    if(playerMoney < 0){
-        std::cout << "You lost " << -playerMoney << " in total.\n";
-    }
-    else if(playerMoney == 0){
-        std::cout << "You broke even!\n";
-    }
-    else{
-        std::cout << "You walked away with " << playerMoney << " in total.\nWell done!\n";
-    }
+    std::cout << "Thanks for playing.\n";
     return 0;
 }
